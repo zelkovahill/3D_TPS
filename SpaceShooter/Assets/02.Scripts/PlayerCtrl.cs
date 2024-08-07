@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
-using UnityEditor.ShortcutManagement;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class PlayerCtrl : MonoBehaviour
 {
@@ -14,12 +14,44 @@ public class PlayerCtrl : MonoBehaviour
 
     public float moveSpeed = 10.0f;   // 이동 속력 변수
 
-
-
     public float turnSpeed = 80.0f;     // 회전 속도 변수
 
-    private void Start()
+    // 초기 생명 값
+    private readonly float initHp = 100.0f;
+
+    // 현재 생명 값
+    public float currHp;
+
+    // Hpbar 연결할 변수
+    private Image hpBar;
+
+    // 델리게이트 선언
+    public delegate void PlayerDieHandler();
+
+    // 이벤트 선언
+    public static event PlayerDieHandler OnPlayerDie;
+
+
+    // ================================================================
+
+    // void 대신 IEnumerator로 코루틴 함수로 변경
+    private IEnumerator Start()
     {
+        // Hpbar 연결
+        hpBar = GameObject.FindGameObjectWithTag("Hp_Bar")?.GetComponent<Image>();
+        // ? 연산자는 null 체크를 할 때 코드를 간결하게 해주는 역할을 한다.
+        // null이 아니라면 GetComponent<Image>()를 실행하고 null이라면 null을 반환한다.
+
+        // var hpBar = GameObject.FindGameObjectWithTag("Hp_Bar").GetComponent<Image>();
+        // if(hpBar != null)
+        // {
+        //     this.hpBar = hpBar;
+        // }
+
+
+        // HP 초기화
+        currHp = initHp;
+        DisplayHealth();
 
         tr = GetComponent<Transform>();                 // Transform 컴포넌트를 추출해 변수에 대입
         anim = GetComponent<Animation>();            // Animation 컴포넌트를 추출해 변수에 대입
@@ -31,6 +63,11 @@ public class PlayerCtrl : MonoBehaviour
 
         // 애니메이션 실행
         anim.Play("Idle");
+
+        // 처음 시작할 때 쓰레깃값(노이즈)이 넘어온다면 코루틴을 활용해 허용 임계치를 적용할 수 있다.
+        turnSpeed = 0.0f;
+        yield return new WaitForSeconds(0.3f);
+        turnSpeed = 80.0f;
     }
 
 
@@ -41,6 +78,13 @@ public class PlayerCtrl : MonoBehaviour
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");
         float r = Input.GetAxisRaw("Mouse X");
+
+        float deadzone = 0.1f;
+
+        if (Mathf.Abs(r) < deadzone)
+        {
+            r = 0;
+        }
 
         // Transform 컴포넌트의 position 속성을 변경
         // transform.position += new Vector3(0, 0, 1);
@@ -103,6 +147,52 @@ public class PlayerCtrl : MonoBehaviour
         }
 
         // 애니메이션 키프레임을 보간해 부드럽게 보정
+    }
 
+    private void OnTriggerEnter(Collider coll)
+    {
+        // 충돌한 Collider가 몬스터의 Punch이면 Player의 HP 차감
+        if (currHp >= 0.0f && coll.CompareTag("Punch"))
+        {
+            currHp -= 10.0f;
+            DisplayHealth();
+            print($"Player HP = {currHp / initHp}");
+            // print("Player HP = " + (currHp / initHp).ToString());
+
+            // Player의 생명이 0 이하이면 사망 처리
+            if (currHp <= 0.0f)
+            {
+                PlayerDie();
+            }
+        }
+    }
+
+    private void PlayerDie()
+    {
+        print("Player Die!!!");
+
+        // // Monster 태그를 가진 모든 게임오브젝트를 찾아옴
+        // GameObject[] monsters = GameObject.FindGameObjectsWithTag("Monster");
+
+        // // 모든 몬스터의 OnPlayerDie 함수를 순차적으로 호출
+        // foreach (GameObject monster in monsters)
+        // {
+        //     monster.SendMessage("OnPlayerDie", SendMessageOptions.DontRequireReceiver);
+        // }
+        // SendMessage 함수는 첫 번째 인자로 전달한 함수명과 동일한 함수가 해당 게임오브젝트의 스크립트에 있다면 실행하라는 명령이다.
+        // SendMessageOptions.DontRequireReceiver는 해당 함수가 없어도 에러를 발생시키지 않는다.
+
+        // 주인공 사망 이벤트 호출(발생)
+        OnPlayerDie();
+
+        // GameManager 스크립트의 IsGameOver 프로퍼티 값을 변경
+        //GameObject.Find("GameManager").GetComponent<GameManager>().IsGameOver = true;
+
+        GameManager.instance.IsGameOver = true;
+    }
+
+    private void DisplayHealth()
+    {
+        hpBar.fillAmount = currHp / initHp;
     }
 }
